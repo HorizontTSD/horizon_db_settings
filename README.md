@@ -28,66 +28,82 @@ VERIFY_TOKEN=
 | `VERIFY_TOKEN`    | Необязательно  | `True`                               | Флаг проверки токена                                                      |
 
 
-# Запуск на своей машине
-
-#### Установка зависимостей
-```bash
-pip install pdm
-pdm install
-```
+для создание базы проходим шаги
 
 
-Активация окружения
-```bash
-source .venv/bin/activate
-```
 
+# Развёртывание PostgreSQL на сервере
 
-Запуск на своей машине
-```bash
-python -m src.server
-```
-
-После запуска ui микросервис адоступен по адресу
-```bash
-http://0.0.0.0:7070/template_fast_api/v1/#/
-```
-
-
-# Запуск контейнера публично
-
-### Создаем .env в корне проекта на сервере
-```asciidoc
-TOKENS_LIST=
-SERVICE_NAME=
-```
-
-### Строим контейнер
-```bash
-sudo docker build -t fast_api_template .
-```
-Узнаем его IMAGE ID 
-```bash
-sudo docker images
-```
+## 1. Установка PostgreSQL
 
 ```bash
-sudo docker run -d --env-file .env -p 7072:7070 <image_id>
+sudo apt update
+sudo apt install postgresql postgresql-contrib -y
 ```
-
-
-
-# Запуск контейнера локально
-
-### Строим контейнер
-```bash
-docker build -t fast_api_template .
-```
-Узнаем его ID
-```bash
-docker images
-```
+### Проверка состояния сервиса:
 
 ```bash
-docker run -p 7071:7071 <IMAGE ID>
+sudo systemctl status postgresql
+```
+
+## 2. Создание нового кластера PostgreSQL на порту 8502
+
+```bash
+sudo pg_createcluster 14 main -p 8502
+sudo pg_ctlcluster 14 secondary start
+sudo pg_lsclusters
+```
+Если кластер создан и статус online, продолжаем.
+
+## 3. Создание базы и пользователя
+Под пользователем postgres
+```bash
+sudo -u postgres psql
+```
+
+Внутри psql:
+```bash
+CREATE USER User WITH PASSWORD 'PASSWORD!';
+CREATE DATABASE horizon_user_db OWNER HorizonSuperUser;
+ALTER USER HorizonSuperUser WITH SUPERUSER;
+\q
+```
+
+Проверка подключения:
+```bash
+psql -h 127.0.0.1 -p 8502 -U User -d db
+
+```
+
+## 4. Настройка внешнего доступа
+1. Открыть конфиг кластера:
+```bash
+sudo nano /etc/postgresql/14/main/postgresql.conf
+```
+Добавить или изменить строки::
+```bash
+listen_addresses = '*'
+port = 8502
+ssl = off
+```
+2. Настроить pg_hba.conf:
+```bash
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+```
+
+Добавить в конец::
+```bash
+host    all             HorizonSuperUser       0.0.0.0/0            md5
+
+```
+
+3. Перезапустить кластер:
+```bash
+sudo pg_ctlcluster 14 main restart
+```
+
+## 5. Проверка внешнего подключения
+
+```bash
+psql -h <IP_сервера> -p 8502 -U HorizonSuperUser -d horizon_user_db
 ```
